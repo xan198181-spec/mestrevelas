@@ -13,13 +13,7 @@ let state = {
   acertos: 0,
   total: 0,
   streak: 0,
-  xp: 0,
-
-  // ---- Biblioteca ----
-  libFiltroDif: 'todos',     // todos | iniciante | intermediario | avancado | expert
-  libFiltroSinal: 'todos',   // todos | alta | baixa | indecisao
-  libBusca: '',
-  libDetalhe: null           // id do padrão aberto em detalhe, ou null
+  xp: 0
 };
 
 const SIGNAL_LABELS = {
@@ -34,13 +28,6 @@ const DIFF_META = {
   intermediario:{ label: 'Intermediário',icon: '🟡', color: 'intermediario' },
   avancado:     { label: 'Avançado',     icon: '🔴', color: 'avancado' },
   expert:       { label: 'Expert',       icon: '💀', color: 'expert' }
-};
-
-const SINAL_META = {
-  todos:     { label: 'Todos',      icon: '🎯' },
-  alta:      { label: 'Alta',       icon: '📈' },
-  baixa:     { label: 'Baixa',      icon: '📉' },
-  indecisao: { label: 'Indecisão',  icon: '⏸️' }
 };
 
 // ---------- Persistence ----------
@@ -127,12 +114,6 @@ function goHome() {
   render();
 }
 
-function openLibrary() {
-  state.screen = 'library';
-  state.libDetalhe = null;
-  render();
-}
-
 // ---------- Chart rendering ----------
 function buildChartSVG(velas) {
   // compute global min/max across all candles' high/low
@@ -188,61 +169,13 @@ function buildChartSVG(velas) {
   return { svg, gridVals: gridVals.reverse() };
 }
 
-// Versão compacta do gráfico para cards de lista (sem eixo)
-function buildMiniChartSVG(velas) {
-  let globalMax = -Infinity, globalMin = Infinity;
-  velas.forEach(v => {
-    globalMax = Math.max(globalMax, v.h);
-    globalMin = Math.min(globalMin, v.l);
-  });
-  const pad = (globalMax - globalMin) * 0.12 || 1;
-  const yMax = globalMax + pad;
-  const yMin = globalMin - pad;
-  const range = yMax - yMin || 1;
-
-  const W = 120;
-  const H = 70;
-  const n = velas.length;
-  const slotW = W / n;
-  const candleW = Math.min(18, slotW * 0.5);
-
-  function yScale(val) {
-    return H - ((val - yMin) / range) * H;
-  }
-
-  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
-  velas.forEach((v, i) => {
-    const cx = slotW * i + slotW / 2;
-    const isGreen = v.c >= v.o;
-    const color = isGreen ? 'var(--green)' : 'var(--red)';
-    const bodyTop = yScale(Math.max(v.o, v.c));
-    const bodyBottom = yScale(Math.min(v.o, v.c));
-    const bodyHeight = Math.max(bodyBottom - bodyTop, 1.5);
-    const wickTop = yScale(v.h);
-    const wickBottom = yScale(v.l);
-    svg += `<line x1="${cx}" y1="${wickTop}" x2="${cx}" y2="${wickBottom}" stroke="${color}" stroke-width="1.5" />`;
-    svg += `<rect x="${cx - candleW/2}" y="${bodyTop}" width="${candleW}" height="${bodyHeight}" fill="${color}" rx="1" />`;
-  });
-  svg += `</svg>`;
-  return svg;
-}
-
 // ---------- Render functions ----------
 function render() {
   const app = document.getElementById('app');
   if (state.screen === 'home') app.innerHTML = renderHome();
   else if (state.screen === 'game') app.innerHTML = renderGame();
   else if (state.screen === 'end') app.innerHTML = renderEnd();
-  else if (state.screen === 'library') app.innerHTML = renderLibrary();
   attachHandlers();
-
-  // Restaura foco/posição do cursor na busca da biblioteca após re-render
-  if (state.screen === 'library') {
-    const searchInput = document.getElementById('lib-search');
-    if (searchInput && document.activeElement !== searchInput) {
-      // não força foco automaticamente para não interferir na navegação
-    }
-  }
 }
 
 function renderHome() {
@@ -391,151 +324,6 @@ function renderEnd() {
   `;
 }
 
-// ---------- Library ----------
-function libraryFilteredPatterns() {
-  let list = PATTERNS;
-
-  if (state.libFiltroDif !== 'todos') {
-    list = list.filter(p => p.dificuldade === state.libFiltroDif);
-  }
-  if (state.libFiltroSinal !== 'todos') {
-    list = list.filter(p => p.sinal === state.libFiltroSinal);
-  }
-  const busca = state.libBusca.trim().toLowerCase();
-  if (busca) {
-    list = list.filter(p => p.nome.toLowerCase().includes(busca));
-  }
-  return list;
-}
-
-function renderLibrary() {
-  // Tela de detalhe de um padrão específico
-  if (state.libDetalhe !== null) {
-    const p = PATTERNS.find(pp => pp.id === state.libDetalhe);
-    if (p) return renderLibraryDetail(p);
-  }
-
-  const list = libraryFilteredPatterns();
-
-  let difChips = '';
-  Object.keys(DIFF_META).forEach(key => {
-    const meta = DIFF_META[key];
-    const active = state.libFiltroDif === key ? `active ${meta.color}` : '';
-    difChips += `<div class="chip ${active}" data-lib-dif="${key}">${meta.icon} ${meta.label}</div>`;
-  });
-
-  let sinalChips = '';
-  Object.keys(SINAL_META).forEach(key => {
-    const meta = SINAL_META[key];
-    let cls = '';
-    if (state.libFiltroSinal === key) {
-      if (key === 'alta') cls = 'active iniciante';
-      else if (key === 'baixa') cls = 'active avancado';
-      else if (key === 'indecisao') cls = 'active intermediario';
-      else cls = 'active todos';
-    }
-    sinalChips += `<div class="chip ${cls}" data-lib-sinal="${key}">${meta.icon} ${meta.label}</div>`;
-  });
-
-  let cardsHTML = '';
-  if (list.length === 0) {
-    cardsHTML = `<div style="padding:40px 20px; text-align:center; color:var(--text-dim);">
-      Nenhum padrão encontrado com esses filtros.
-    </div>`;
-  } else {
-    list.forEach(p => {
-      const sinalMeta = SIGNAL_LABELS[p.sinal];
-      const diffMeta = DIFF_META[p.dificuldade];
-      const mini = buildMiniChartSVG(p.velas);
-      cardsHTML += `
-        <div class="lib-card" data-lib-open="${p.id}">
-          <div class="lib-card-chart">${mini}</div>
-          <div class="lib-card-info">
-            <div class="lib-card-name">${p.nome}</div>
-            <div class="lib-card-tags">
-              <span class="lib-tag sinal-${p.sinal}">${sinalMeta.icon} ${sinalMeta.label}</span>
-              <span class="lib-tag dif-${diffMeta.color}">${diffMeta.icon} ${diffMeta.label}</span>
-            </div>
-          </div>
-          <div class="lib-card-arrow">›</div>
-        </div>
-      `;
-    });
-  }
-
-  return `
-    <div class="topbar">
-      <button class="back" id="back-btn">←</button>
-      <div class="title">📖 Biblioteca</div>
-      <div style="width:36px"></div>
-    </div>
-
-    <div style="padding:12px 16px 0;">
-      <input type="text" id="lib-search" class="lib-search" placeholder="Buscar padrão pelo nome..." value="${state.libBusca.replace(/"/g,'&quot;')}" />
-    </div>
-
-    <div style="padding:10px 0 0;">
-      <div style="font-size:12px; color:var(--text-dim); font-weight:600; padding:0 16px 6px;">DIFICULDADE</div>
-      <div class="filters-row" style="padding-top:0;">${difChips}</div>
-      <div style="font-size:12px; color:var(--text-dim); font-weight:600; padding:8px 16px 6px;">SINAL</div>
-      <div class="filters-row" style="padding-top:0;">${sinalChips}</div>
-    </div>
-
-    <div style="padding:8px 16px; color:var(--text-dim); font-size:13px;">
-      ${list.length} padrão${list.length === 1 ? '' : 'ões'} encontrado${list.length === 1 ? '' : 's'}
-    </div>
-
-    <div class="lib-list">${cardsHTML}</div>
-  `;
-}
-
-function renderLibraryDetail(p) {
-  const { svg, gridVals } = buildChartSVG(p.velas);
-  const sinalMeta = SIGNAL_LABELS[p.sinal];
-  const diffMeta = DIFF_META[p.dificuldade];
-
-  const cls = p.sinal === 'alta' ? 'correto' : p.sinal === 'baixa' ? 'errado' : '';
-
-  return `
-    <div class="topbar">
-      <button class="back" id="lib-back-btn">←</button>
-      <div class="title" style="font-size:15px;">${p.nome}</div>
-      <div style="width:36px"></div>
-    </div>
-
-    <div style="padding:10px 16px 0; display:flex; gap:8px;">
-      <span class="lib-tag sinal-${p.sinal}">${sinalMeta.icon} ${sinalMeta.label}</span>
-      <span class="lib-tag dif-${diffMeta.color}">${diffMeta.icon} ${diffMeta.label}</span>
-      <span class="lib-tag" style="background:var(--panel-2); color:var(--text-dim);">${p.categoria}</span>
-    </div>
-
-    <div class="question-card">
-      <h2>Como identificar</h2>
-      <div class="chart-wrap">
-        <div class="chart-axis">
-          ${gridVals.map(v => `<span>${v.toFixed(1)}</span>`).join('')}
-        </div>
-        <div class="chart-svg-wrap">${svg}</div>
-      </div>
-    </div>
-
-    <div style="padding:0 16px;">
-      <div class="info-box dica">
-        <div class="lbl">💡 Dica para identificar</div>
-        <p>${p.dica}</p>
-      </div>
-      <div class="info-box why" style="margin-top:12px;">
-        <div class="lbl">📖 O que indica</div>
-        <p>${p.explicacao}</p>
-      </div>
-    </div>
-
-    <div style="padding:20px 16px 24px;">
-      <button class="btn-secondary" id="lib-detail-back-btn" style="margin-bottom:0;">← Voltar à Biblioteca</button>
-    </div>
-  `;
-}
-
 // ---------- Event handlers ----------
 function attachHandlers() {
   document.querySelectorAll('[data-diff]').forEach(el => {
@@ -549,7 +337,7 @@ function attachHandlers() {
   if (playBtn) playBtn.addEventListener('click', startGame);
 
   const libBtn = document.getElementById('lib-btn');
-  if (libBtn) libBtn.addEventListener('click', openLibrary);
+  if (libBtn) libBtn.addEventListener('click', () => alert('Biblioteca em breve! Continue jogando para desbloquear todos os padrões.'));
 
   const backBtn = document.getElementById('back-btn');
   if (backBtn) backBtn.addEventListener('click', goHome);
@@ -571,55 +359,6 @@ function attachHandlers() {
 
   const homeBtn = document.getElementById('home-btn');
   if (homeBtn) homeBtn.addEventListener('click', goHome);
-
-  // ---- Biblioteca ----
-  document.querySelectorAll('[data-lib-dif]').forEach(el => {
-    el.addEventListener('click', () => {
-      state.libFiltroDif = el.getAttribute('data-lib-dif');
-      render();
-    });
-  });
-
-  document.querySelectorAll('[data-lib-sinal]').forEach(el => {
-    el.addEventListener('click', () => {
-      state.libFiltroSinal = el.getAttribute('data-lib-sinal');
-      render();
-    });
-  });
-
-  const libSearch = document.getElementById('lib-search');
-  if (libSearch) {
-    libSearch.addEventListener('input', (e) => {
-      state.libBusca = e.target.value;
-      render();
-      // mantém o foco e o cursor no campo de busca após o re-render
-      const input = document.getElementById('lib-search');
-      if (input) {
-        input.focus();
-        const val = input.value;
-        input.setSelectionRange(val.length, val.length);
-      }
-    });
-  }
-
-  document.querySelectorAll('[data-lib-open]').forEach(el => {
-    el.addEventListener('click', () => {
-      state.libDetalhe = parseInt(el.getAttribute('data-lib-open'), 10);
-      render();
-    });
-  });
-
-  const libBackBtn = document.getElementById('lib-back-btn');
-  if (libBackBtn) libBackBtn.addEventListener('click', () => {
-    state.libDetalhe = null;
-    render();
-  });
-
-  const libDetailBackBtn = document.getElementById('lib-detail-back-btn');
-  if (libDetailBackBtn) libDetailBackBtn.addEventListener('click', () => {
-    state.libDetalhe = null;
-    render();
-  });
 }
 
 // ---------- Init ----------

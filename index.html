@@ -251,5 +251,12 @@
 
 <script src="patterns.js"></script>
 <script src="app.js"></script>
-</body>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log('Service Worker Ativo!'))
+            .catch(err => console.log('Erro no Service Worker:', err));
+    }
+</script></body>
 </html>

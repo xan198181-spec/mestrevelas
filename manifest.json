@@ -1,7 +1,7 @@
 {
   "name": "Mestre das Velas",
   "short_name": "Mestre Velas",
-  "description": "Domine os padrões de candlestick através da prática.",
+  "description": "Domine os padrões de candlesticks e melhore suas operações.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a0e0d",
